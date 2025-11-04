@@ -43,7 +43,7 @@ public class ChatBotService {
         }
 
         // 2) Recordatorio
-        //AQUI SE DEBE DE IMPLEMENTAR LO DE CLAUDIA - GOOGLE CALENDAF
+        //AQUI SE DEBE DE IMPLEMENTAR LO DE CLAUDIA - GOOGLE CALENDAR
         NLP.RemindParse r = NLP.parseReminder(body);
         if (r != null) {
             LocalDateTime when = r.when;

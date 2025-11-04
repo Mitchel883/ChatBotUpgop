@@ -43,7 +43,7 @@ public class ChatBotService {
         }
 
         // 2) Recordatorio
-        //AQUI SE DEBE DE IMPLEMENTAR LO DE CLAUDIA - GOOGLE CALENDAR
+        //AQUI SE DEBE DE IMPLEMENTAR LO DE CLAUDIA - GOOGLE CALENDAR 
         //NO SE BORRA SOLAMENTE SE IMPLEMENTA LO QUE HACE FALTA
         NLP.RemindParse r = NLP.parseReminder(body);
         if (r != null) {

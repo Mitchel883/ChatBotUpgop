@@ -34,6 +34,7 @@ public class ChatBotService {
         String body = bodyRaw.trim();
 
         // 0) Menú
+        //ESTE ES LA OPCION DE MENU
         if (isMenu(body)) { sendMenu(from); return; }
 
         // 1) Asesor directo

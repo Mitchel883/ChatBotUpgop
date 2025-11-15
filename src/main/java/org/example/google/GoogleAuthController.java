@@ -14,7 +14,7 @@ public class GoogleAuthController {
     public GoogleAuthController(GoogleOAuthService oauth) {
         this.oauth = oauth;
     }
-
+    //a
     // Paso 1: generar URL de autorización (redirige automáticamente)
     @GetMapping("/authorize")
     public ResponseEntity<Void> authorize(@RequestParam String phone) {

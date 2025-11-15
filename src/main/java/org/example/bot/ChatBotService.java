@@ -48,7 +48,7 @@ public class ChatBotService {
         if (body.equalsIgnoreCase("evento prueba")) {
             try {
                 String result = calendarService.crearEventoPrueba(from);
-
+//a
                 // Si el servicio regresa mensaje de token faltante
                 if (result.contains("NO_OAUTH_TOKEN") ||
                         result.contains("no ha hecho login") ||

@@ -23,4 +23,21 @@
 hs_err_pid*
 replay_pid*
 
+
+# Credenciales sensibles
 src/main/resources/google-calendar-credentials.json
+**/google-calendar-credentials.json
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Configuración local
+application-local.properties
+
+# Sistema operativo
+.DS_Store
+Thumbs.db

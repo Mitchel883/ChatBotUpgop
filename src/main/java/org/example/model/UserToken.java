@@ -1,7 +1,7 @@
 package org.example.model;
 
 public class UserToken {
-
+    //a
     private String phone;
     private String accessToken;
     private String refreshToken;

@@ -43,13 +43,21 @@
         <dependency>
             <groupId>com.google.apis</groupId>
             <artifactId>google-api-services-calendar</artifactId>
-            <version>v3-rev305-1.25.0</version>
+            <version>v3-rev20220715-2.0.0</version>
+        </dependency>
+
+        <!-- Google Auth Library (necesaria para Service Account) -->
+        <dependency>
+            <groupId>com.google.auth</groupId>
+            <artifactId>google-auth-library-oauth2-http</artifactId>
+            <version>1.19.0</version>
         </dependency>
 
         <!-- Jackson JSON -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
+            <version>2.13.5</version>
         </dependency>
 
         <!-- Twilio (solo si aún lo usas, puedes quitarlo si no lo necesitas) -->

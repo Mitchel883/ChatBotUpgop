@@ -52,8 +52,31 @@ public class ChatBotService {
             // Si no incluyeron "hoy/mañana", asume hoy
             if (when == null) when = LocalDateTime.of(LocalDate.now(), LocalTime.now().plusMinutes(1));
             reminders.add(new Reminder(from, r.text, when));
+
+            try {
+                CalendarService calendarService = new CalendarService();
+                String eventLink = calendarService.createEvent(
+                        r.text != null ? r.text : "Recordatorio",
+                        when
+                );
+
+                sender.sendText(from,
+                        "*Evento agregado a Google Calendar*\n" +
+                                r.text + "\n" +
+                                + when + "\n" +
+                                + eventLink
+                );
+
+            } catch (Exception e) {
+                sender.sendText(from,
+                        "No se creo el evento.\n" +
+                                "Detalles: " + e.getMessage());
+            }
+
             sender.sendText(from, "✅ Listo, te recuerdo *" + r.text + "* el " + human(when) + ".");
             return;
+
+
         }
 
         // 3) Enviar mensaje a contacto (inmediato o programado a la hora indicada)

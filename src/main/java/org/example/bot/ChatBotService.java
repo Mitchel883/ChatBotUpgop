@@ -15,12 +15,11 @@ import java.time.LocalTime;
 @Service
 public class ChatBotService {
 
-    private  CloudApiSender sender = null;
-    private  InfoService info = null;
-    private  ContactBook contacts = null;
-    private  ReminderService reminders = null;
+    private CloudApiSender sender = null;
+    private InfoService info = null;
+    private ContactBook contacts = null;
+    private ReminderService reminders = null;
 
-    // Cambia por el teléfono real de asesor si quieres
     private static final String ADVISOR = "521111111111";
 
     public ChatBotService(CloudApiSender sender, InfoService info, ContactBook contacts, ReminderService reminders) {
@@ -34,8 +33,10 @@ public class ChatBotService {
         String body = bodyRaw.trim();
 
         // 0) Menú
-        //ESTE ES LA OPCION DE MENU
-        if (isMenu(body)) { sendMenu(from); return; }
+        if (isMenu(body)) {
+            sendMenu(from);
+            return;
+        }
 
         // 1) Asesor directo
         if (body.equalsIgnoreCase("asesor")) {
@@ -43,20 +44,40 @@ public class ChatBotService {
             return;
         }
 
-        // 2) Recordatorio
-        //AQUI SE DEBE DE IMPLEMENTAR LO DE CLAUDIA - GOOGLE CALENDAR 
-        //NO SE BORRA SOLAMENTE SE IMPLEMENTA LO QUE HACE FALTA
-        NLP.RemindParse r = NLP.parseReminder(body);
-        if (r != null) {
-            LocalDateTime when = r.when;
-            // Si no incluyeron "hoy/mañana", asume hoy
-            if (when == null) when = LocalDateTime.of(LocalDate.now(), LocalTime.now().plusMinutes(1));
-            reminders.add(new Reminder(from, r.text, when));
-            sender.sendText(from, "✅ Listo, te recuerdo *" + r.text + "* el " + human(when) + ".");
+        // 1.5) Ver calendario compartido - NUEVO
+        if (body.equalsIgnoreCase("calendario") || body.equalsIgnoreCase("ver calendario")) {
+            String link = reminders.getCalendarLink();
+            sender.sendText(from,
+                    "📅 *Calendario de Recordatorios Unipoli*\n\n" +
+                            "Aquí puedes ver todos los recordatorios programados:\n" +
+                            link + "\n\n" +
+                            "💡 Agrega este calendario a tu Google Calendar para recibir notificaciones.");
             return;
         }
 
-        // 3) Enviar mensaje a contacto (inmediato o programado a la hora indicada)
+        // 2) Recordatorio - Ahora sincronizado con Google Calendar
+        NLP.RemindParse r = NLP.parseReminder(body);
+        if (r != null) {
+            LocalDateTime when = r.when;
+            if (when == null) {
+                when = LocalDateTime.of(LocalDate.now(), LocalTime.now().plusMinutes(1));
+            }
+
+            // Validar que la fecha sea futura
+            if (when.isBefore(LocalDateTime.now())) {
+                sender.sendText(from, "⚠️ La fecha debe ser en el futuro. Intenta de nuevo.");
+                return;
+            }
+
+            reminders.add(new Reminder(from, r.text, when));
+            sender.sendText(from,
+                    "✅ Listo, te recuerdo *" + r.text + "* el " + human(when) + ".\n" +
+                            "📅 También lo guardé en Google Calendar.\n" +
+                            "Escribe *calendario* para ver todos tus recordatorios.");
+            return;
+        }
+
+        // 3) Enviar mensaje a contacto
         NLP.SendParse s = NLP.parseSendTo(body);
         if (s != null) {
             String dest = contacts.find(s.contact);
@@ -72,8 +93,17 @@ public class ChatBotService {
                     if (!pm && h == 12) h = 0;
                 }
                 LocalDateTime when = LocalDateTime.of(LocalDate.now(), LocalTime.of(h, s.minute != null ? s.minute : 0));
+
+                // Validar fecha futura
+                if (when.isBefore(LocalDateTime.now())) {
+                    sender.sendText(from, "⚠️ La hora debe ser en el futuro. Intenta de nuevo.");
+                    return;
+                }
+
                 reminders.add(new Reminder(dest, s.text, when));
-                sender.sendText(from, "📩 Enviaré a *" + capitalize(s.contact) + "*: \"" + s.text + "\" a las " + hhmm(when) + ".");
+                sender.sendText(from,
+                        "📩 Enviaré a *" + capitalize(s.contact) + "*: \"" + s.text + "\" a las " + hhmm(when) + ".\n" +
+                                "📅 Guardado en Google Calendar.");
             } else {
                 sender.sendText(dest, s.text);
                 sender.sendText(from, "📨 Mensaje enviado a *" + capitalize(s.contact) + "*.");
@@ -81,7 +111,7 @@ public class ChatBotService {
             return;
         }
 
-        // 4) Alta rápida de contacto: "agregar juan 521234567890"
+        // 4) Alta rápida de contacto
         if (body.toLowerCase().startsWith("agregar ")) {
             String[] parts = body.split("\\s+");
             if (parts.length >= 3) {
@@ -109,13 +139,24 @@ public class ChatBotService {
                         "1) Información: escribe palabras como *constancia*, *ficha*, *horario*.\n" +
                         "2) Recordatorios: *Recuérdame mañana a las 4pm que debo enviar la tarea*.\n" +
                         "3) Mensajes a contactos: *Envía mensaje a Juan que debe enviar la tarea a las 3pm*.\n" +
-                        "4) Asesor humano: escribe *asesor*.\n" +
-                        "5) Contactos: *agregar juan 521234567890*.\n");
+                        "4) Ver calendario: escribe *calendario*.\n" +
+                        "5) Asesor humano: escribe *asesor*.\n" +
+                        "6) Contactos: *agregar juan 521234567890*.\n");
     }
 
-    private String quickMenuHint() { return "Escribe *menú* para ver opciones."; }
+    private String quickMenuHint() {
+        return "Escribe *menú* para ver opciones.";
+    }
 
-    private String human(LocalDateTime dt) { return dt.toLocalDate() + " " + hhmm(dt); }
-    private String hhmm(LocalDateTime dt) { return String.format("%02d:%02d", dt.getHour(), dt.getMinute()); }
-    private String capitalize(String s) { return s.substring(0,1).toUpperCase() + s.substring(1); }
+    private String human(LocalDateTime dt) {
+        return dt.toLocalDate() + " " + hhmm(dt);
+    }
+
+    private String hhmm(LocalDateTime dt) {
+        return String.format("%02d:%02d", dt.getHour(), dt.getMinute());
+    }
+
+    private String capitalize(String s) {
+        return s.substring(0,1).toUpperCase() + s.substring(1);
+    }
 }

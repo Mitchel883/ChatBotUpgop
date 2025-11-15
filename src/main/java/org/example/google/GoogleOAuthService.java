@@ -27,7 +27,7 @@ public class GoogleOAuthService {
     public GoogleOAuthService() throws Exception {
         loadClientSecrets();
     }
-
+    //a
     private void loadClientSecrets() throws Exception {
         InputStream in = getClass().getClassLoader().getResourceAsStream("credentials_oauth.json");
         if (in == null) {

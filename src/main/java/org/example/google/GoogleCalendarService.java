@@ -118,7 +118,7 @@ public class GoogleCalendarService {
         return oauth.generateAuthLink(phone);
     }
 
-
+//a
     //   CREAR EVENTO REAL (USADO POR "recordatorios")
 
     public void createEvent(String phone, String text, LocalDateTime when) throws Exception {

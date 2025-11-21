@@ -4,6 +4,7 @@ import org.example.contacts.ContactBook;
 import org.example.info.InfoService;
 import org.example.reminders.NLP;
 import org.example.reminders.Reminder;
+import org.example.reminders.ReminderParser;
 import org.example.reminders.ReminderService;
 import org.example.CloudApiSender;
 import org.example.google.GoogleCalendarService;
@@ -12,6 +13,9 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 
 @Service
 public class ChatBotService {
@@ -43,16 +47,57 @@ public class ChatBotService {
         String body = bodyRaw.trim();
 
 
+
+
+
+    //O) BIENVENIDA
+        if (isBienvenido(body)) {
+            sendBienvenido(from);
+            return;
+        }
+
+        // 1) MENÚ
+        if (isMenu(body)) {
+            sendMenu(from);
+            return;
+        }
+        // 2) FAQ o fallback
+        String answer = info.lookup(body, ADVISOR);
+
+        if (answer != null) {
+            sender.sendText(
+                    from,
+                    answer + "\n\n" + quickMenuHint()
+            );
+            // 👇 aquí cortas para que NO siga evaluando las demás opciones
+            return;
+        }
+
+
+
         // 0) EVENTO PRUEBA
 
-        if (body.equalsIgnoreCase("evento prueba")) {
+    if(isReminder(body)) {
             try {
-                String result = calendarService.crearEventoPrueba(from);
-//a
-                // Si el servicio regresa mensaje de token faltante
-                if (result.contains("NO_OAUTH_TOKEN") ||
-                        result.contains("no ha hecho login") ||
-                        result.contains("NO TOKEN")) {
+                // 1) Parsear el mensaje del usuario (fecha/hora + título)
+                ReminderParser.ReminderData data = ReminderParser.parse(body);
+
+                ZonedDateTime start = data.getStart();
+                ZonedDateTime end = start.plusMinutes(30); // duración por defecto
+
+                // 2) Crear evento en Google Calendar
+                String result = calendarService.crearEventoDesdeRecordatorio(
+                        from,
+                        data.getTitle(), // título ya limpio: "examen de física", etc.
+                        start,
+                        end
+                );
+
+                // 3) Manejo de falta de token (por si tu servicio regresa el texto en vez de lanzar excepción)
+                if (result != null && (
+                        result.contains("NO_OAUTH_TOKEN") ||
+                                result.contains("no ha hecho login") ||
+                                result.contains("NO TOKEN"))) {
 
                     String authUrl = calendarService.generateAuthLink(from);
 
@@ -61,16 +106,47 @@ public class ChatBotService {
                             "🔐 Necesito que autorices tu Google Calendar.\n" +
                                     "Haz clic aquí para activar tu cuenta:\n" +
                                     authUrl +
-                                    "\n\nCuando termines, escribe *evento prueba* otra vez. 😊"
+                                    "\n\nCuando termines, vuelve a escribirme tu recordatorio. 😊"
                     );
                     return;
                 }
 
-                // Evento creado
-                sender.sendText(from, "📅 Evento creado exitosamente:\n" + result);
+                // 4) Formatear fecha/hora bonito en español
+                DateTimeFormatter dateFmt = DateTimeFormatter.ofPattern(
+                        "EEEE d 'de' MMMM yyyy", new Locale("es", "MX"));
+                DateTimeFormatter timeFmt = DateTimeFormatter.ofPattern(
+                        "hh:mm a", new Locale("es", "MX"));
+
+                String fechaStr = start.format(dateFmt);
+                String horaStr = start.format(timeFmt);
+
+                // 5) Respuesta OK al usuario, incluyendo link al evento
+                sender.sendText(
+                        from,
+                        "📅 Evento creado:\n" +
+                                "📝 *" + data.getTitle() + "*\n" +
+                                "📆 " + fechaStr + "\n" +
+                                "⏰ " + horaStr + "\n" +
+                                "🔗 Abre tu evento en Google Calendar:\n" +
+                                result
+                );
+                return;
+
+            } catch (IllegalArgumentException e) {
+                // errores de parseo (no entendió fecha/hora)
+                sender.sendText(
+                        from,
+                        "🕒 No pude entender bien la fecha/hora del recordatorio.\n" +
+                                "Ejemplos que sí entiendo:\n" +
+                                "• Recuérdame mañana a las 4pm que debo enviar la tarea\n" +
+                                "• Recuérdame el viernes a las 10 que tengo junta\n" +
+                                "• Recuérdame que a las 9am tengo un evento\n"
+                );
+                return;
 
             } catch (Exception e) {
 
+                // Por si tu servicio lanza la excepción con el mensaje NO_OAUTH_TOKEN
                 if (e.getMessage() != null && e.getMessage().contains("NO_OAUTH_TOKEN")) {
 
                     String authUrl = calendarService.generateAuthLink(from);
@@ -79,71 +155,30 @@ public class ChatBotService {
                             from,
                             "🔐 Necesito que autorices tu Google Calendar.\n" +
                                     "Haz clic aquí:\n" + authUrl +
-                                    "\n\nLuego vuelve a escribir *evento prueba*. 😊"
+                                    "\n\nLuego vuelve a mandarme tu recordatorio. 😊"
                     );
                     return;
                 }
 
                 sender.sendText(from, "⚠️ Error creando evento: " + e.getMessage());
             }
-            return;
         }
+        //AQUI TERMINA LOGICA DE GCALENDAR
 
 
-        // 1) MENÚ
-        if (isMenu(body)) {
-            sendMenu(from);
-            return;
-        }
 
-
-        // 2) ASESOR
+        // 3) ASESOR
         if (body.equalsIgnoreCase("asesor")) {
             sender.sendText(from,
                     "Te conecto con un asesor al +" + ADVISOR +
                             ". Escribe tu duda y te responde.");
             return;
-        }
-
-        // 3) RECORDATORIO + GOOGLE CALENDAR
-        NLP.RemindParse r = NLP.parseReminder(body);
-        if (r != null) {
-
-            LocalDateTime when = r.when;
-            if (when == null)
-                when = LocalDateTime.of(LocalDate.now(), LocalTime.now().plusMinutes(1));
-
-            reminders.add(new Reminder(from, r.text, when));
-
-            try {
-                calendarService.createEvent(from, r.text, when);
-
-            } catch (Exception e) {
-
-                // FALTÓ TOKEN → Mandar link OAuth
-                if (e.getMessage() != null && e.getMessage().contains("NO_OAUTH_TOKEN")) {
-
-                    String authUrl = calendarService.generateAuthLink(from);
-                    sender.sendText(
-                            from,
-                            "🔐 Para agregar esto a Google Calendar necesito autorización.\n" +
-                                    "Haz clic aquí:\n" + authUrl +
-                                    "\n\nLuego vuelve a enviar tu recordatorio. 😊"
-                    );
-
-                } else {
-                    sender.sendText(
-                            from,
-                            "⚠️ No pude agregar el evento a Google Calendar.\n" +
-                                    "Pero tu recordatorio interno sí fue guardado."
-                    );
-                }
-            }
+        }else{
 
             sender.sendText(from,
-                    "✅ Listo, te recuerdo *" + r.text +
-                            "* el " + human(when) + ".");
-            return;
+                    "No encontré esa información 🤔. ¿Quieres hablar con un asesor? Escríbeme *asesor* y te conecto al " +
+            ADVISOR + ".");
+
         }
 
 
@@ -208,9 +243,7 @@ public class ChatBotService {
         }
 
 
-        // 6) FAQ o fallback
-        String answer = info.lookup(body, ADVISOR);
-        sender.sendText(from, answer + "\n\n" + quickMenuHint());
+
     }
 
 
@@ -232,6 +265,79 @@ public class ChatBotService {
                         "5) Contactos: *agregar juan 521234567890*.\n"
         );
     }
+
+    private boolean isBienvenido(String s) {
+        s = s.toLowerCase();
+        return s.equals("hola") || s.equals("buen día") || s.equals("Hi") || s.equals("Hey");
+    }
+
+    private void sendBienvenido(String to) {
+        sender.sendText(
+                to,
+                "👋 ¡Hola! Bienvenido al *ChatBot Unipoli*.\n\n" +
+                        "Estoy aquí para ayudarte con información escolar, recordatorios y otras funciones útiles.\n\n" +
+                        "📍 Cuando quieras ver todas mis opciones, solo escribe *menú*."
+        );
+    }
+
+    // Prefijos válidos para interpretar que el usuario quiere un recordatorio
+    private static final String[] REMINDER_PREFIXES = new String[]{
+            // recordar
+            "recuerdame",
+            "recuerdame que",
+            "recuerdame mañana",
+            "recuerdame maniana",
+            "recuerdame el",
+            "recuerdame a las",
+            "recuerdame que a las",
+
+            // agendar
+            "agendame",
+            "agendame que",
+            "agendame mañana",
+            "agendame el",
+            "agendame a las",
+
+            // acordar / acuérdame
+            "acuerdame",
+            "acuerdame que",
+            "acuerdame mañana",
+            "acuerdame el",
+
+            // otras formas naturales
+            "ponme un recordatorio",
+            "pon un recordatorio",
+            "anotame",
+            "anotame que",
+            "anota que",
+            "no se me olvide",
+            "que no se me olvide",
+            "avisame",
+            "avisame que",
+            "avísame",
+            "avísame que"
+    };
+
+    private boolean isReminder(String s) {
+        if (s == null) return false;
+
+        String norm = s.toLowerCase()
+                .replace("á", "a")
+                .replace("é", "e")
+                .replace("í", "i")
+                .replace("ó", "o")
+                .replace("ú", "u")
+                .trim();
+
+        for (String prefix : REMINDER_PREFIXES) {
+            if (norm.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+
 
     private String quickMenuHint() {return "Escribe *menú* para ver opciones.";}
 

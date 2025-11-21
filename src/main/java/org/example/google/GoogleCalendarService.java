@@ -9,21 +9,27 @@ import com.google.api.services.calendar.Calendar;
 import com.google.api.services.calendar.model.Event;
 import com.google.api.services.calendar.model.EventDateTime;
 import org.example.model.UserToken;
+import org.example.reminders.ReminderParseResult;
 import org.springframework.stereotype.Service;
 
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.Date;
+import java.util.Locale;
+import java.util.regex.Pattern;
 
 @Service
 public class GoogleCalendarService {
 
     private final GoogleOAuthService oauth;
+    private static final String TIME_ZONE_ID = "America/Mexico_City";
+
 
     public GoogleCalendarService(GoogleOAuthService oauth) {
         this.oauth = oauth;
@@ -151,4 +157,46 @@ public class GoogleCalendarService {
 
         System.out.println("✔ Evento insertado en Google Calendar para " + phone);
     }
+
+    public String crearEventoDesdeRecordatorio(
+            String phone,
+            String title,
+            ZonedDateTime start,
+            ZonedDateTime end
+    ) throws Exception {
+
+        UserToken token = oauth.getUserToken(phone);
+        if (token == null) {
+            throw new Exception("NO_OAUTH_TOKEN");
+        }
+
+        Calendar client = buildCalendarClient(token);
+
+        Event event = new Event()
+                .setSummary(title) // 🟢 Título correcto
+                .setDescription("Recordatorio generado automáticamente por el bot");
+
+        DateTime startDate = new DateTime(start.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+        DateTime endDate   = new DateTime(end.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+
+        event.setStart(new EventDateTime()
+                .setDateTime(startDate)
+                .setTimeZone("America/Mexico_City"));
+
+        event.setEnd(new EventDateTime()
+                .setDateTime(endDate)
+                .setTimeZone("America/Mexico_City"));
+
+        Event created = client.events()
+                .insert("primary", event)
+                .execute();
+
+        return created.getHtmlLink(); // 🔗 link directo al Calendar
+    }
+
+
+
+    // ...resto de tu clase (buildCalendarClient, oauth, etc.)
+
+
 }

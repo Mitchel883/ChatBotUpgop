@@ -1,86 +1,90 @@
 package org.example.reminders;
 
+import com.google.cloud.Timestamp;
 import org.example.CloudApiSender;
-import org.example.calendar.GoogleCalendarService;
+import org.example.firebase.ReminderRepository;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.PostConstruct;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Iterator;
+import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 @Service
 public class ReminderService {
     private final CopyOnWriteArrayList<Reminder> pending = new CopyOnWriteArrayList<>();
     private final CloudApiSender sender;
-    private final GoogleCalendarService calendarService;
+    private final ReminderRepository repository;
 
-    public ReminderService(CloudApiSender sender, GoogleCalendarService calendarService) {
+    public ReminderService(CloudApiSender sender, ReminderRepository repository) {
         this.sender = sender;
-        this.calendarService = calendarService;
+        this.repository = repository;
     }
 
-    /**
-     * Agrega un recordatorio y lo sincroniza con Google Calendar
-     */
-    public void add(Reminder r) {
-        // Crear evento en Google Calendar
-        String eventId = calendarService.createEvent(
-                "Recordatorio Unipoli",
-                r.text,
-                r.when,
-                30 // Duración de 30 minutos por defecto
-        );
+    @PostConstruct
+    public void loadPendingFromFirebase() {
+        System.out.println("📄 Loading pending reminders from Firebase...");
+        List<Reminder> reminders = repository.findPending();
+        pending.addAll(reminders);
+        System.out.println("✅ Loaded " + reminders.size() + " pending reminders");
+    }
 
-        // Guardar el ID del evento en el recordatorio
-        if (eventId != null) {
-            r.googleEventId = eventId;
-            System.out.println("📅 Recordatorio sincronizado con Google Calendar: " + eventId);
+    public void add(Reminder r) {
+        // Guardar en Firebase
+        String id = repository.save(r);
+        if (id != null) {
+            r.id = id;
         }
 
+        // Agregar a memoria
         pending.add(r);
+        System.out.println("📌 Reminder added: " + r.text + " for " + r.getWhenAsLocalDateTime());
     }
 
-    /**
-     * Revisa cada 30 segundos si hay recordatorios que enviar
-     */
     @Scheduled(fixedRate = 30000)
     public void tick() {
         LocalDateTime now = LocalDateTime.now();
         Iterator<Reminder> it = pending.iterator();
+
         while (it.hasNext()) {
             Reminder r = it.next();
-            if (!r.when.isAfter(now)) {
-                // Enviar recordatorio por WhatsApp
-                sender.sendText(r.toE164, "⏰ Recordatorio: " + r.text);
 
-                // Eliminar de la lista local
-                it.remove();
+            // ✅ Convertir Timestamp a LocalDateTime para comparar
+            LocalDateTime whenLdt = r.getWhenAsLocalDateTime();
 
-                // Nota: El evento permanece en Google Calendar como registro histórico
-                // Si quieres eliminarlo automáticamente, descomenta la siguiente línea:
-                // if (r.googleEventId != null) calendarService.deleteEvent(r.googleEventId);
+            if (whenLdt != null && !whenLdt.isAfter(now)) {
+                try {
+                    sender.sendText(r.toE164, "⏰ Recordatorio: " + r.text);
 
-                System.out.println("✅ Recordatorio enviado: " + r.text);
+                    // ✅ Convertir LocalDateTime a Timestamp para Firebase
+                    Timestamp nowTimestamp = toTimestamp(LocalDateTime.now());
+                    repository.updateStatus(r.id, "SENT", nowTimestamp);
+
+                    it.remove();
+
+                    System.out.println("✅ Reminder sent: " + r.text);
+                } catch (Exception e) {
+                    System.err.println("❌ Error sending reminder: " + e.getMessage());
+
+                    repository.updateStatus(r.id, "FAILED", null);
+                    it.remove();
+                }
             }
         }
     }
 
-    /**
-     * Elimina un recordatorio específico (por si implementas cancelación)
-     */
     public boolean remove(Reminder r) {
-        boolean removed = pending.remove(r);
-        if (removed && r.googleEventId != null) {
-            calendarService.deleteEvent(r.googleEventId);
-        }
-        return removed;
+        return pending.remove(r);
     }
 
-    /**
-     * Obtiene el enlace al calendario compartido
-     */
-    public String getCalendarLink() {
-        return calendarService.getCalendarLink();
+    // ✅ Helper para convertir LocalDateTime a Timestamp
+    private static Timestamp toTimestamp(LocalDateTime ldt) {
+        if (ldt == null) return null;
+        Instant instant = ldt.atZone(ZoneId.systemDefault()).toInstant();
+        return Timestamp.ofTimeSecondsAndNanos(instant.getEpochSecond(), instant.getNano());
     }
 }

@@ -48,6 +48,9 @@ public class DataInitializer {
             // 5. Inicializar Students de ejemplo (opcional)
             initializeExampleStudents(firestore, now);
 
+            // 6. Verificar colección de Reminders (se crea automáticamente al usar)
+            initializeRemindersCollection(firestore);
+
             System.out.println("✅ Estructura de datos inicializada en Firebase");
         };
     }
@@ -434,5 +437,24 @@ public class DataInitializer {
         firestore.collection("students").document("5218711234568").set(student2).get();
 
         System.out.println("✅ Estudiantes de ejemplo inicializados");
+    }
+
+    // ==================== REMINDERS ====================
+    private void initializeRemindersCollection(Firestore firestore) throws Exception {
+        System.out.println("⏰ Verificando colección de recordatorios...");
+
+        // Verificar si ya existe la colección
+        long reminderCount = firestore.collection("reminders").limit(1).get().get().size();
+
+        if (reminderCount > 0) {
+            System.out.println("✅ Colección de reminders ya existe con " + reminderCount + " recordatorio(s)");
+            return;
+        }
+
+        // La colección se creará automáticamente cuando se agregue el primer recordatorio
+        // No es necesario crear documentos de ejemplo para reminders ya que son temporales
+
+        System.out.println("✅ Colección de reminders lista para usarse");
+        System.out.println("   Los recordatorios se crearán automáticamente cuando los usuarios los soliciten");
     }
 }

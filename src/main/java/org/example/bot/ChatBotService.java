@@ -77,41 +77,56 @@ public class ChatBotService {
 
         // 0) EVENTO PRUEBA
 
-    if(isReminder(body)) {
+        if(isReminder(body)) {
             try {
                 // 1) Parsear el mensaje del usuario (fecha/hora + título)
                 ReminderParser.ReminderData data = ReminderParser.parse(body);
 
                 ZonedDateTime start = data.getStart();
-                ZonedDateTime end = start.plusMinutes(30); // duración por defecto
+                ZonedDateTime end = start.plusMinutes(30);
+                LocalDateTime whenLdt = start.toLocalDateTime();
 
-                // 2) Crear evento en Google Calendar
-                String result = calendarService.crearEventoDesdeRecordatorio(
-                        from,
-                        data.getTitle(), // título ya limpio: "examen de física", etc.
-                        start,
-                        end
-                );
+                // 2) Crear recordatorio en Firebase/memoria PRIMERO
+                Reminder reminder = new Reminder(from, data.getTitle(), whenLdt);
 
-                // 3) Manejo de falta de token (por si tu servicio regresa el texto en vez de lanzar excepción)
-                if (result != null && (
-                        result.contains("NO_OAUTH_TOKEN") ||
-                                result.contains("no ha hecho login") ||
-                                result.contains("NO TOKEN"))) {
+                // 3) Intentar crear evento en Google Calendar (opcional)
+                String calendarLink = null;
 
-                    String authUrl = calendarService.generateAuthLink(from);
-
-                    sender.sendText(
-                            from,
-                            "🔐 Necesito que autorices tu Google Calendar.\n" +
-                                    "Haz clic aquí para activar tu cuenta:\n" +
-                                    authUrl +
-                                    "\n\nCuando termines, vuelve a escribirme tu recordatorio. 😊"
+                try {
+                    calendarLink = calendarService.crearEventoDesdeRecordatorio(
+                            from, data.getTitle(), start, end
                     );
-                    return;
+
+                    if (calendarLink != null && calendarLink.contains("eid=")) {
+                        String googleEventId = calendarLink.substring(calendarLink.indexOf("eid=") + 4);
+                        reminder.googleEventId = googleEventId;
+                        System.out.println("✅ Evento creado en Google Calendar");
+                    }
+
+                } catch (Exception e) {
+                    if (e.getMessage() != null && e.getMessage().contains("NO_OAUTH_TOKEN")) {
+                        String authUrl = calendarService.generateAuthLink(from);
+                        sender.sendText(from,
+                                "🔐 Necesito que autorices tu Google Calendar.\n" +
+                                        "Haz clic aquí:\n" + authUrl +
+                                        "\n\n⚠️ Mientras tanto, guardaré tu recordatorio " +
+                                        "y te lo enviaré por WhatsApp a su hora. 😊"
+                        );
+                    } else {
+                        System.err.println("⚠️ Error en Google Calendar: " + e.getMessage());
+                    }
                 }
 
-                // 4) Formatear fecha/hora bonito en español
+                // 4) ⭐ GUARDAR en Firebase y memoria (RETORNA String o null)
+                String reminderId = reminders.add(reminder);
+
+                if (reminderId != null) {
+                    System.out.println("✅ Recordatorio guardado con ID: " + reminderId);
+                } else {
+                    System.out.println("⚠️ Recordatorio guardado solo en memoria");
+                }
+
+                // 5) Formatear fecha/hora
                 DateTimeFormatter dateFmt = DateTimeFormatter.ofPattern(
                         "EEEE d 'de' MMMM yyyy", new Locale("es", "MX"));
                 DateTimeFormatter timeFmt = DateTimeFormatter.ofPattern(
@@ -120,22 +135,22 @@ public class ChatBotService {
                 String fechaStr = start.format(dateFmt);
                 String horaStr = start.format(timeFmt);
 
-                // 5) Respuesta OK al usuario, incluyendo link al evento
-                sender.sendText(
-                        from,
-                        "📅 Evento creado:\n" +
-                                "📝 *" + data.getTitle() + "*\n" +
-                                "📆 " + fechaStr + "\n" +
-                                "⏰ " + horaStr + "\n" +
-                                "🔗 Abre tu evento en Google Calendar:\n" +
-                                result
-                );
+                // 6) Respuesta al usuario
+                String respuesta = "✅ Recordatorio programado:\n" +
+                        "📝 *" + data.getTitle() + "*\n" +
+                        "📆 " + fechaStr + "\n" +
+                        "⏰ " + horaStr + "\n\n" +
+                        "💬 Te enviaré un mensaje por WhatsApp a esa hora";
+
+                if (calendarLink != null) {
+                    respuesta += "\n\n🔗 También lo guardé en tu Google Calendar:\n" + calendarLink;
+                }
+
+                sender.sendText(from, respuesta);
                 return;
 
             } catch (IllegalArgumentException e) {
-                // errores de parseo (no entendió fecha/hora)
-                sender.sendText(
-                        from,
+                sender.sendText(from,
                         "🕒 No pude entender bien la fecha/hora del recordatorio.\n" +
                                 "Ejemplos que sí entiendo:\n" +
                                 "• Recuérdame mañana a las 4pm que debo enviar la tarea\n" +
@@ -145,22 +160,10 @@ public class ChatBotService {
                 return;
 
             } catch (Exception e) {
-
-                // Por si tu servicio lanza la excepción con el mensaje NO_OAUTH_TOKEN
-                if (e.getMessage() != null && e.getMessage().contains("NO_OAUTH_TOKEN")) {
-
-                    String authUrl = calendarService.generateAuthLink(from);
-
-                    sender.sendText(
-                            from,
-                            "🔐 Necesito que autorices tu Google Calendar.\n" +
-                                    "Haz clic aquí:\n" + authUrl +
-                                    "\n\nLuego vuelve a mandarme tu recordatorio. 😊"
-                    );
-                    return;
-                }
-
-                sender.sendText(from, "⚠️ Error creando evento: " + e.getMessage());
+                System.err.println("❌ Error procesando recordatorio: " + e.getMessage());
+                e.printStackTrace();
+                sender.sendText(from, "⚠️ Error creando recordatorio: " + e.getMessage());
+                return;
             }
         }
         //AQUI TERMINA LOGICA DE GCALENDAR

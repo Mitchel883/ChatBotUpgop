@@ -25,9 +25,9 @@ replay_pid*
 
 
 # Credenciales sensibles
-src/main/resources/google-calendar-credentials.json
-**/google-calendar-credentials.json
-src/main/resources/firebase-service-account.json
+#src/main/resources/google-calendar-credentials.json
+#**/google-calendar-credentials.json
+#src/main/resources/firebase-service-account.json
 
 # IntelliJ IDEA
 .idea/

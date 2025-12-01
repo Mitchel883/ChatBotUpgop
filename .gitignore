@@ -43,11 +43,12 @@ Thumbs.db
 # ============================================
 #   CREDENCIALES
 # ============================================
-**/firebase-service-account.json
+/firebase-service-account.json
 **/google-calendar-credentials.json
 **/credentials*.json
 **/*-service-account-*.json
 **/*service-account*.json
+/chatbot-unipoli-c2401b1f100d.json
 
 # Archivos de configuración sensibles
 application.properties

@@ -6,10 +6,12 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.client.auth.oauth2.TokenResponse;
+import org.example.firebase.OAuthTokenRepository;
 import org.example.model.UserToken;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.PostConstruct;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.util.*;
@@ -17,9 +19,13 @@ import java.util.*;
 @Service
 public class GoogleOAuthService {
 
-    private final Map<String, UserToken> tokens = new HashMap<>();
+    // ⭐ Memoria caché (se recarga desde Firebase al iniciar)
+    private final Map<String, UserToken> tokensCache = new HashMap<>();
 
-    // ✅ Leer desde application.properties
+    // ⭐ Repositorio para persistencia
+    private final OAuthTokenRepository tokenRepository;
+
+    // Configuración desde application.properties
     @Value("${google.client.id}")
     private String clientId;
 
@@ -32,6 +38,21 @@ public class GoogleOAuthService {
     private static final List<String> SCOPES = Collections.singletonList(
             "https://www.googleapis.com/auth/calendar.events"
     );
+
+    public GoogleOAuthService(OAuthTokenRepository tokenRepository) {
+        this.tokenRepository = tokenRepository;
+    }
+
+    /**
+     * ⭐ Carga todos los tokens desde Firebase al iniciar la aplicación
+     */
+    @PostConstruct
+    public void loadTokensFromFirebase() {
+        System.out.println("🔄 Cargando tokens OAuth desde Firebase...");
+        Map<String, UserToken> loadedTokens = tokenRepository.loadAllTokens();
+        tokensCache.putAll(loadedTokens);
+        System.out.println("✅ " + loadedTokens.size() + " tokens OAuth cargados en caché");
+    }
 
     /**
      * Genera el link de autorización OAuth de Google
@@ -86,7 +107,7 @@ public class GoogleOAuthService {
     }
 
     /**
-     * Intercambia el código de autorización por tokens de acceso
+     * ⭐ Intercambia el código de autorización por tokens y los GUARDA en Firebase
      */
     public void exchangeCode(String phone, String code) {
         try {
@@ -111,11 +132,16 @@ public class GoogleOAuthService {
                     tokenResponse.getRefreshToken()
             );
 
-            tokens.put(phone, token);
+            // ⭐ Guardar en caché
+            tokensCache.put(phone, token);
+
+            // ⭐ Guardar en Firebase (PERSISTENTE)
+            tokenRepository.saveToken(phone, token);
 
             System.out.println("✅ OAuth completado exitosamente para " + phone);
             System.out.println("   Access token: " + tokenResponse.getAccessToken().substring(0, 20) + "...");
             System.out.println("   Refresh token: " + (tokenResponse.getRefreshToken() != null ? "Sí" : "No"));
+            System.out.println("   💾 Token guardado en Firebase (permanente)");
 
         } catch (Exception e) {
             System.err.println("❌ Error intercambiando OAuth code: " + e.getMessage());
@@ -125,24 +151,42 @@ public class GoogleOAuthService {
     }
 
     /**
-     * Obtiene el token de un usuario
+     * ⭐ Obtiene el token de un usuario (primero de caché, si no de Firebase)
      */
     public UserToken getUserToken(String phone) {
-        return tokens.get(phone);
+        // Intentar desde caché
+        UserToken token = tokensCache.get(phone);
+
+        if (token != null) {
+            return token;
+        }
+
+        // Si no está en caché, intentar desde Firebase
+        System.out.println("ℹ️ Token no en caché, cargando desde Firebase: " + phone);
+        token = tokenRepository.getToken(phone);
+
+        if (token != null) {
+            // Agregar a caché para próximas llamadas
+            tokensCache.put(phone, token);
+        }
+
+        return token;
     }
 
     /**
      * Verifica si un usuario tiene token válido
      */
     public boolean isAuthenticated(String phone) {
-        return tokens.containsKey(phone);
+        UserToken token = getUserToken(phone);
+        return token != null;
     }
 
     /**
-     * Remueve el token de un usuario (logout)
+     * ⭐ Remueve el token de un usuario (caché y Firebase)
      */
     public void revokeToken(String phone) {
-        tokens.remove(phone);
+        tokensCache.remove(phone);
+        tokenRepository.deleteToken(phone);
         System.out.println("🔓 Token revocado para: " + phone);
     }
 
@@ -153,6 +197,21 @@ public class GoogleOAuthService {
         System.out.println("📋 Configuración OAuth:");
         System.out.println("   Client ID: " + clientId);
         System.out.println("   Redirect URI: " + redirectUri);
-        System.out.println("   Usuarios autenticados: " + tokens.size());
+        System.out.println("   Usuarios en caché: " + tokensCache.size());
+        System.out.println("   Usuarios autenticados: " + getAuthenticatedUsersCount());
+    }
+
+    /**
+     * Obtiene el número de usuarios autenticados
+     */
+    public int getAuthenticatedUsersCount() {
+        return tokensCache.size();
+    }
+
+    /**
+     * Refresca todos los tokens desde Firebase (útil para debug)
+     */
+    public void refreshTokensFromFirebase() {
+        loadTokensFromFirebase();
     }
 }

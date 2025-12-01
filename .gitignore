@@ -39,3 +39,29 @@ application-local.properties
 # Sistema operativo
 .DS_Store
 Thumbs.db
+
+# ============================================
+#   CREDENCIALES
+# ============================================
+**/firebase-service-account.json
+**/google-calendar-credentials.json
+**/credentials*.json
+**/*-service-account-*.json
+**/*service-account*.json
+
+# Archivos de configuración sensibles
+application.properties
+application-prod.properties
+application-*.properties
+
+# Directorios de build
+target/
+build/
+
+.vscode/
+
+# Archivos temporales
+
+*.tmp
+
+

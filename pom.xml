@@ -1,7 +1,6 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
-                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>mx.unipoli</groupId>
@@ -15,50 +14,76 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <java.version>1.8</java.version>
         <spring-boot.version>2.7.18</spring-boot.version>
+        <!-- Ajusta estas dos versiones a las más recientes disponibles en Maven Central -->
+        <google.api-client.version>2.2.0</google.api-client.version>
+        <!-- Usa un artefacto Calendar generado para 2.x (sufijo -2.0.0). Reemplaza por el más reciente. -->
+        <google.calendar.version>v3-rev20240517-2.0.0</google.calendar.version>
     </properties>
 
+    <!-- BOM de Spring Boot para alinear transitive deps -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
-        <!-- Spring Boot Web -->
+        <!-- Spring MVC -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
-            <version>${spring-boot.version}</version>
         </dependency>
 
-        <!-- WebFlux para enviar mensajes (API de Meta / WhatsApp) -->
+        <!-- WebClient (WebFlux). No levanta servidor reactivo a menos que lo configures. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webflux</artifactId>
-            <version>${spring-boot.version}</version>
         </dependency>
 
-        <!-- Google API Client -->
         <dependency>
             <groupId>com.google.api-client</groupId>
             <artifactId>google-api-client</artifactId>
             <version>2.2.0</version>
         </dependency>
 
-        <!-- Google Calendar API -->
         <dependency>
             <groupId>com.google.apis</groupId>
             <artifactId>google-api-services-calendar</artifactId>
-            <version>v3-rev305-1.25.0</version>
+            <version>${google.calendar.version}</version>
         </dependency>
 
-        <!-- Jackson JSON -->
+
         <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
+            <groupId>com.google.oauth-client</groupId>
+            <artifactId>google-oauth-client</artifactId>
+            <version>1.34.1</version>
         </dependency>
 
-        <!-- Twilio (solo si aún lo usas, puedes quitarlo si no lo necesitas) -->
+
+
+        <!-- Twilio (elimínalo si ya no lo ocupas) -->
         <dependency>
             <groupId>com.twilio.sdk</groupId>
             <artifactId>twilio</artifactId>
             <version>9.13.0</version>
         </dependency>
 
+
+        <!-- (Opcional) Validación si usas @Valid/@Validated -->
+        <!--
+        <dependency>
+          <groupId>org.springframework.boot</groupId>
+          <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        -->
+
+        <!-- NO declares jackson-databind: viene transitivo con starter-web -->
     </dependencies>
 
     <build>
@@ -71,6 +96,7 @@
                     <source>${java.version}</source>
                     <target>${java.version}</target>
                     <encoding>${project.build.sourceEncoding}</encoding>
+                    <!-- Alternativa moderna: <release>${java.version}</release> -->
                 </configuration>
             </plugin>
 
